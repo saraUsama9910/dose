@@ -1,8 +1,8 @@
-MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250707121148||ORM^O01|1522|P|2.3
+MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250709150002||ORM^O01|1522|P|2.3
 PID|||1522||SARA ABBAS|||19900508|F
 OBR|||1522||CT|||||20250508
 OBX|1|NM|CTDIvol||5.59243|mGy
-OBX|2|NM|DLP||3279.96297|mGy*cm
-OBX|3|NM|Dose_mSv||45.91948|mSv
+OBX|2|NM|DLP||1635.78716|mGy*cm
+OBX|3|NM|Dose_mSv||22.90102|mSv
 OBX|4|NM|AccumulatedDose||0.00000|mSv
 OBX|5|NM|DosePerYear||0.00000|mSv

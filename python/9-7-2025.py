@@ -244,19 +244,34 @@ def process_dicom_files(files):
             if modality == "CT":
                 ctdi = ds.get("CTDIvol", None)
                 thickness = ds.get("SliceThickness", None)
-
-                if ctdi is not None and thickness is not None:
+                z = None
+                if 'ImagePositionPatient' in ds:
                     try:
-                        ctdi = float(ctdi)
-                        thickness = float(thickness)
-                        if key not in ct_slices_by_case:
-                            ct_slices_by_case[key] = {"total_ctdi": 0.0, "total_thickness": 0.0, "count": 0}
-
-                        ct_slices_by_case[key]["total_ctdi"] += ctdi
-                        ct_slices_by_case[key]["total_thickness"] += thickness
-                        ct_slices_by_case[key]["count"] += 1
+                        z = float(ds.ImagePositionPatient[2])
                     except:
                         pass
+
+                if key not in ct_slices_by_case:
+                    ct_slices_by_case[key] = {
+                        "ctdi_values": [],
+                        "z_positions": [],
+                        "thicknesses": []
+                    }
+
+                if ctdi is not None:
+                    try:
+                        ct_slices_by_case[key]["ctdi_values"].append(float(ctdi))
+                    except:
+                        pass
+
+                if thickness is not None:
+                    try:
+                        ct_slices_by_case[key]["thicknesses"].append(float(thickness))
+                    except:
+                        pass
+
+                if z is not None:
+                    ct_slices_by_case[key]["z_positions"].append(z)
 
             elif modality in ["CR", "DR", "DX", "XRAY"]:
                 dap = ds.get((0x0018, 0x115E), None)
@@ -301,17 +316,26 @@ def process_dicom_files(files):
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process file {path}.\nError: {e}")
 
+    # ======= حساب CT =======
     for key in ct_slices_by_case:
-        ctdi_total = ct_slices_by_case[key]["total_ctdi"]
-        thickness_total = ct_slices_by_case[key]["total_thickness"]
-        slice_count = ct_slices_by_case[key]["count"]
+        case = ct_slices_by_case[key]
+        ctdi_vals = case["ctdi_values"]
+        z_positions = case["z_positions"]
+        thicknesses = case["thicknesses"]
 
-        if slice_count == 0 or thickness_total == 0:
+        if not ctdi_vals:
             continue
 
-        avg_ctdi = ctdi_total / slice_count
-        avg_thickness = thickness_total / slice_count
-        scan_length = avg_thickness * slice_count
+        avg_ctdi = sum(ctdi_vals) / len(ctdi_vals)
+        scan_length = None
+
+        if len(z_positions) >= 2:
+            scan_length = abs(max(z_positions) - min(z_positions))
+        elif thicknesses:
+            avg_thickness = sum(thicknesses) / len(thicknesses)
+            scan_length = avg_thickness * len(thicknesses)
+        else:
+            scan_length = 400  # fallback تقديري
 
         dlp = avg_ctdi * scan_length
 
@@ -333,6 +357,7 @@ def process_dicom_files(files):
         temp_cases[key]["kFactor"] = k
         temp_cases[key]["mSv"] = round(dose, 5)
 
+    # ======= توليد رسائل HL7 لكل حالة =======
     for key, case in temp_cases.items():
         hl7_msg = convert_to_hl7_from_table(case)
         hl7_filename = f"{HL7_DIR}/{case['Name']}_{case['Date'].strftime('%Y%m%d')}_{case['PatientID']}.hl7"
@@ -341,6 +366,7 @@ def process_dicom_files(files):
 
     all_data.extend(temp_cases.values())
 
+    # ======= حساب الجرعة التراكمية والسنوية لكل مريض =======
     patient_records = {}
     for data in all_data:
         pid = data["PatientID"]
@@ -373,7 +399,6 @@ def process_dicom_files(files):
         data["DosePerYear"] = dose_per_year_dict.get((pid, dt), 0)
 
     display_text_data()
-
 
 # ================================================================
 # عدل دالة read_dicom_files الحالية لتستخدم process_dicom_files:
