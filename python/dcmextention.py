@@ -16,7 +16,8 @@ def select_folders():
         if os.path.isdir(os.path.join(parent_folder, folder))
     ]
     messagebox.showinfo("Folders Selected", f"{len(selected_folders)} folders selected.")
-
+ 
+ 
 def convert_to_dcm():
     if not selected_folders:
         messagebox.showerror("No Folders", "Please select folders first.")
