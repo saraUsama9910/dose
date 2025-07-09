@@ -32,6 +32,8 @@ COMMON_VARIANTS = {
 # def convert_to_hl7(data):
 
 
+
+
 def send_hl7_message(ip, port, message):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
