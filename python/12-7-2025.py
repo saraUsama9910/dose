@@ -759,9 +759,9 @@ SHOW_COLOR = "#3BB2C7"
 SHOW_HOVER = "#16575F"
 SELECT_COLOR = "#589cfc"
 SELECT_HOVER = "#475569"
-ctk.CTkButton(root, text="📂 DICOM Files", command=read_dicom_files,
-              width=140, height=40, fg_color=BUTTON_COLOR, hover_color=BUTTON_HOVER,
-              corner_radius=10, font=("Arial", 16, "bold")).place(relx=0.01, rely=0.22)
+# ctk.CTkButton(root, text="📂 DICOM Files", command=read_dicom_files,
+#               width=140, height=40, fg_color=BUTTON_COLOR, hover_color=BUTTON_HOVER,
+#               corner_radius=10, font=("Arial", 16, "bold")).place(relx=0.01, rely=0.22)
 
 ctk.CTkButton(root, text="📁 DICOM Folder", command=read_dicom_folder,
               width=140, height=40, fg_color=BUTTON_COLOR, hover_color=BUTTON_HOVER,
@@ -816,9 +816,9 @@ shadow_frame.place(relx=0.14, rely=0.15, relwidth=0.80, relheight=0.70)
 content_frame = ctk.CTkFrame(root, fg_color="#ffffff", corner_radius=10)
 content_frame.place(relx=0.15, rely=0.16, relwidth=0.78, relheight=0.68)
 # رسالة ترحيبية
-welcome_label = ctk.CTkLabel(content_frame, text="Click here to select DICOM files",
+welcome_label = ctk.CTkLabel(content_frame, text="Click here to select DICOM Cases",
 text_color="blue", font=ctk.CTkFont(size=20, weight="bold"), cursor="hand2")
 welcome_label.pack(expand=True)
-welcome_label.bind("<Button-1>", lambda e: read_dicom_files())
+welcome_label.bind("<Button-1>", lambda e: read_dicom_folder())
 root.mainloop()
 
