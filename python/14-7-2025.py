@@ -537,7 +537,10 @@ def show_case_images(case):
     window = ctk.CTkToplevel()
     window.title(f"Images for {case['Name']} - {case['Date'].strftime('%Y-%m-%d')}")
     window.geometry("900x700")
-
+    # رفع النافذة للأعلى وإجبارها تبقى فوق كل شيء
+    window.lift()
+    window.attributes("-topmost", True)
+    window.focus_force()
     index = 0
     images = case.get("Images", [])
 
@@ -629,7 +632,12 @@ def show_selected_cases():
     top = ctk.CTkToplevel(root)
     top.title("Selected Cases Viewer")
     top.geometry("1100x700")
+
+    # رفع النافذة فوق كل النوافذ
     top.lift()
+    top.attributes("-topmost", True)
+    top.focus_force()  # إجبار التركيز على النافذة
+
 
     rows = 2 if len(selected_cases) == 4 else 1
     cols = 2
