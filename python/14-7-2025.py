@@ -3,6 +3,10 @@ from tkinter import filedialog, messagebox, simpledialog
 from PIL import Image, ImageTk
 import pydicom
 import os
+import pydicom
+import os
+import numpy as np
+
 import numpy as np
 from datetime import datetime
 from datetime import datetime, timedelta
@@ -11,6 +15,16 @@ import re
 from rapidfuzz import fuzz  
 import socket
 import pytesseract
+
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+
+
+
+image = Image.open("test.png")
+text = pytesseract.image_to_string(image)
+print(text)
+
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("dark-blue")
 CSV_FILE = "rad.csv"
