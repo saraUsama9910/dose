@@ -204,6 +204,24 @@ def read_dicom_folder():
 
     process_dicom_files(dicom_files)
 
+def extract_dlp_from_image(ds):
+    """يحاول استخراج Total DLP من صورة DICOM باستخدام OCR"""
+    try:
+        if 'PixelData' not in ds:
+            return None
+        arr = ds.pixel_array
+        img = Image.fromarray(arr).convert("L")
+        text = pytesseract.image_to_string(img)
+
+        for line in text.splitlines():
+            if "total dlp" in line.lower():
+                numbers = [float(s) for s in line.replace(",", ".").split() if s.replace(".", "", 1).isdigit()]
+                for num in numbers:
+                    if num > 10:  # استبعاد أرقام غير منطقية زي 0.5
+                        return num
+    except:
+        return None
+    return None
 def process_dicom_files(files):
     if not files:
         return
@@ -338,7 +356,24 @@ def process_dicom_files(files):
         thicknesses = case["thicknesses"]
 
         if not ctdi_vals:
-            continue
+        # لو مفيش CTDI أصلاً، نحاول نجيب DLP من الصور باستخدام OCR
+            for file in files:
+                try:
+                    ds_img = pydicom.dcmread(file)
+                    if getattr(ds_img, "Modality", "").upper() == "CT":
+                        ocr_dlp = extract_dlp_from_image(ds_img)
+                        if ocr_dlp:
+                            k = 0.014  # chest كقيمة افتراضية، ممكن تحسبيها حسب study_desc
+                            dose = ocr_dlp * k
+                            temp_cases[key]["CTDIvol"] = 0
+                            temp_cases[key]["DLP"] = round(ocr_dlp, 5)
+                            temp_cases[key]["kFactor"] = k
+                            temp_cases[key]["mSv"] = round(dose, 5)
+                            break  # كفاية أول واحدة فيها OCR ناجح
+                except:
+                    continue
+            continue  # نكمل بعد محاولة الـ OCR
+
 
         avg_ctdi = sum(ctdi_vals) / len(ctdi_vals)
         scan_length = None
