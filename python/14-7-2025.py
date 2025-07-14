@@ -780,16 +780,16 @@ ctk.CTkButton(root, text="💬 HL7 Message", command=show_hl7_for_selected,
               corner_radius=10, font=("Arial", 16, "bold")).place(relx=0.01, rely=0.34)
 
 
-ctk.CTkButton(root, text="🧾 Selected Cases", command=show_selected_cases,
+ctk.CTkButton(root, text="🧾 Show Cases", command=show_selected_cases_images,
               width=140, height=40, fg_color=SELECT_COLOR, hover_color=SELECT_HOVER,
               corner_radius=10, font=("Arial", 16, "bold")).place(relx=0.01, rely=0.40)
 
 ctk.CTkButton(root, text="❌ Delete Cases", command=delete_selected,
               width=140, height=40, fg_color=DELETE_COLOR, hover_color=DELETE_HOVER,
               corner_radius=10, font=("Arial", 16, "bold")).place(relx=0.01, rely=0.46)
-ctk.CTkButton(root, text="🧾 Show Cases", command=show_selected_cases_images,
-              width=140, height=40, fg_color=SELECT_COLOR,  hover_color=SELECT_HOVER,
-              corner_radius=10, font=("Arial", 16, "bold")).place(relx=0.01, rely=0.52)
+# ctk.CTkButton(root, text="🧾 Show Cases", command=show_selected_cases_images,
+#               width=140, height=40, fg_color=SELECT_COLOR,  hover_color=SELECT_HOVER,
+#               corner_radius=10, font=("Arial", 16, "bold")).place(relx=0.01, rely=0.52)
 # خيارات الفلترة والترتيب بجانب الأزرار
 sort_var = ctk.StringVar(value="Name")
 ctk.CTkLabel(root, text="Sort by:",fg_color="white", text_color="black").place(relx=0.78, rely=0.08)
