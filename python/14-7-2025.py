@@ -205,7 +205,6 @@ def read_dicom_folder():
     process_dicom_files(dicom_files)
 
 def extract_dlp_from_image(ds):
-    """يحاول استخراج Total DLP من صورة DICOM باستخدام OCR"""
     try:
         if 'PixelData' not in ds:
             return None
@@ -215,13 +214,15 @@ def extract_dlp_from_image(ds):
 
         for line in text.splitlines():
             if "total dlp" in line.lower():
-                numbers = [float(s) for s in line.replace(",", ".").split() if s.replace(".", "", 1).isdigit()]
+                numbers = [float(s.replace(",", "."))
+                           for s in line.split() if s.replace(",", ".").replace(".", "", 1).isdigit()]
                 for num in numbers:
-                    if num > 10:  # استبعاد أرقام غير منطقية زي 0.5
+                    if num > 10:  # نتجاهل الأرقام الصغيرة غير المنطقية
                         return num
     except:
         return None
     return None
+
 def process_dicom_files(files):
     if not files:
         return
@@ -249,6 +250,30 @@ def process_dicom_files(files):
                 date_obj = datetime.now()
 
             modality = getattr(ds, "Modality", "").upper()
+            # ==== OCR DLP لو أول صورة من نوع CT ====
+            ocr_dlp = None
+            if modality == "CT" and 'PixelData' in ds:
+                ocr_dlp = extract_dlp_from_image(ds)
+                if ocr_dlp:
+                    # نختار k حسب نوع الفحص (chest كافتراضي)
+                    if "head" in study_desc:
+                        k = 0.0021
+                    elif "neck" in study_desc:
+                        k = 0.0059
+                    elif "chest" in study_desc:
+                        k = 0.014
+                    elif "abdomen" in study_desc or "pelvis" in study_desc:
+                        k = 0.015
+                    else:
+                        k = 0.015
+
+                    dose = ocr_dlp * k
+                    temp_cases[key]["CTDIvol"] = 0  # لأنه مش مستخرج
+                    temp_cases[key]["DLP"] = round(ocr_dlp, 5)
+                    temp_cases[key]["kFactor"] = k
+                    temp_cases[key]["mSv"] = round(dose, 5)
+
+                    continue  # خلاص OCR كفاية مش هنحسب تاني
             series_desc = getattr(ds, "SeriesDescription", "").lower()
             study_desc = getattr(ds, "StudyDescription", "").lower()
             patient_id = getattr(ds, "PatientID", "")
@@ -448,6 +473,8 @@ def process_dicom_files(files):
         data["DosePerYear"] = dose_per_year_dict.get((pid, dt), 0)
 
     display_text_data()
+
+
 
 # ================================================================
 # عدل دالة read_dicom_files الحالية لتستخدم process_dicom_files:
