@@ -374,63 +374,7 @@ def process_dicom_files(files):
             messagebox.showerror("Error", f"Failed to process file {path}.\nError: {e}")
 
     # ======= حساب CT =======
-    for key in ct_slices_by_case:
-        case = ct_slices_by_case[key]
-        ctdi_vals = case["ctdi_values"]
-        z_positions = case["z_positions"]
-        thicknesses = case["thicknesses"]
-
-        if not ctdi_vals:
-        # لو مفيش CTDI أصلاً، نحاول نجيب DLP من الصور باستخدام OCR
-            for file in files:
-                try:
-                    ds_img = pydicom.dcmread(file)
-                    if getattr(ds_img, "Modality", "").upper() == "CT":
-                        ocr_dlp = extract_dlp_from_image(ds_img)
-                        if ocr_dlp:
-                            k = 0.014  # chest كقيمة افتراضية، ممكن تحسبيها حسب study_desc
-                            dose = ocr_dlp * k
-                            temp_cases[key]["CTDIvol"] = 0
-                            temp_cases[key]["DLP"] = round(ocr_dlp, 5)
-                            temp_cases[key]["kFactor"] = k
-                            temp_cases[key]["mSv"] = round(dose, 5)
-                            break  # كفاية أول واحدة فيها OCR ناجح
-                except:
-                    continue
-            continue  # نكمل بعد محاولة الـ OCR
-
-
-        avg_ctdi = sum(ctdi_vals) / len(ctdi_vals)
-        scan_length = None
-
-        if len(z_positions) >= 2:
-            scan_length = abs(max(z_positions) - min(z_positions))
-        elif thicknesses:
-            avg_thickness = sum(thicknesses) / len(thicknesses)
-            scan_length = avg_thickness * len(thicknesses)
-        else:
-            scan_length = 400  # fallback تقديري
-
-        dlp = avg_ctdi * scan_length
-
-        study_desc = temp_cases[key]["Dataset"].get("StudyDescription", "").lower()
-        k = 0.015
-        if "head" in study_desc:
-            k = 0.0021
-        elif "neck" in study_desc:
-            k = 0.0059
-        elif "chest" in study_desc:
-            k = 0.014
-        elif "abdomen" in study_desc or "pelvis" in study_desc:
-            k = 0.015
-
-        dose = dlp * k
-
-        temp_cases[key]["CTDIvol"] = round(avg_ctdi, 5)
-        temp_cases[key]["DLP"] = round(dlp, 5)
-        temp_cases[key]["kFactor"] = k
-        temp_cases[key]["mSv"] = round(dose, 5)
-
+    
     # ======= توليد رسائل HL7 لكل حالة =======
     for key, case in temp_cases.items():
         hl7_msg = convert_to_hl7_from_table(case)
