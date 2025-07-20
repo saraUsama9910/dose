@@ -208,20 +208,25 @@ def extract_dlp_from_image(ds):
     try:
         if 'PixelData' not in ds:
             return None
+
         arr = ds.pixel_array
         img = Image.fromarray(arr).convert("L")
         text = pytesseract.image_to_string(img)
 
         for line in text.splitlines():
             if "total dlp" in line.lower():
-                numbers = [float(s.replace(",", "."))
-                           for s in line.split() if s.replace(",", ".").replace(".", "", 1).isdigit()]
+                numbers = [float(s.replace(",", ".")) 
+                           for s in line.split() 
+                           if s.replace(",", ".").replace(".", "", 1).isdigit()]
                 for num in numbers:
-                    if num > 10:  # نتجاهل الأرقام الصغيرة غير المنطقية
+                    if num > 10:  # تجاهل الأرقام غير المنطقية
                         return num
-    except:
+    except Exception as e:
+        print("OCR Error:", e)
         return None
+
     return None
+
 
 def process_dicom_files(files):
     if not files:
@@ -238,6 +243,7 @@ def process_dicom_files(files):
 
     case_dap_totals = {}
     ct_slices_by_case = {}
+    ocr_checked_keys = set()
 
     for path in files:
         try:
@@ -250,30 +256,6 @@ def process_dicom_files(files):
                 date_obj = datetime.now()
 
             modality = getattr(ds, "Modality", "").upper()
-            # ==== OCR DLP لو أول صورة من نوع CT ====
-            ocr_dlp = None
-            if modality == "CT" and 'PixelData' in ds:
-                ocr_dlp = extract_dlp_from_image(ds)
-                if ocr_dlp:
-                    # نختار k حسب نوع الفحص (chest كافتراضي)
-                    if "head" in study_desc:
-                        k = 0.0021
-                    elif "neck" in study_desc:
-                        k = 0.0059
-                    elif "chest" in study_desc:
-                        k = 0.014
-                    elif "abdomen" in study_desc or "pelvis" in study_desc:
-                        k = 0.015
-                    else:
-                        k = 0.015
-
-                    dose = ocr_dlp * k
-                    temp_cases[key]["CTDIvol"] = 0  # لأنه مش مستخرج
-                    temp_cases[key]["DLP"] = round(ocr_dlp, 5)
-                    temp_cases[key]["kFactor"] = k
-                    temp_cases[key]["mSv"] = round(dose, 5)
-
-                    continue  # خلاص OCR كفاية مش هنحسب تاني
             series_desc = getattr(ds, "SeriesDescription", "").lower()
             study_desc = getattr(ds, "StudyDescription", "").lower()
             patient_id = getattr(ds, "PatientID", "")
@@ -297,6 +279,30 @@ def process_dicom_files(files):
                     "Modality": modality,
                     "Dataset": ds
                 }
+
+            # ==== OCR DLP فقط أول مرة لكل حالة CT ====
+            if modality == "CT" and key not in ocr_checked_keys:
+                ocr_checked_keys.add(key)
+                if 'PixelData' in ds:
+                    ocr_dlp = extract_dlp_from_image(ds)
+                    if ocr_dlp:
+                        if "head" in study_desc:
+                            k = 0.0021
+                        elif "neck" in study_desc:
+                            k = 0.0059
+                        elif "chest" in study_desc:
+                            k = 0.014
+                        elif "abdomen" in study_desc or "pelvis" in study_desc:
+                            k = 0.015
+                        else:
+                            k = 0.015
+
+                        dose = ocr_dlp * k
+                        temp_cases[key]["CTDIvol"] = 0  # مش مستخرج من الصورة
+                        temp_cases[key]["DLP"] = round(ocr_dlp, 5)
+                        temp_cases[key]["kFactor"] = k
+                        temp_cases[key]["mSv"] = round(dose, 5)
+                        continue  # OCR لقينا DLP خلاص، مش هنكمل قراءة CT
 
             if modality == "CT":
                 ctdi = ds.get("CTDIvol", None)
@@ -373,8 +379,37 @@ def process_dicom_files(files):
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process file {path}.\nError: {e}")
 
-    # ======= حساب CT =======
-    
+    # ======= حساب CT fallback لو OCR مفشلش =======
+    for key, slice_data in ct_slices_by_case.items():
+        if temp_cases[key]["DLP"] == 0:
+            avg_ctdi = (
+                sum(slice_data["ctdi_values"]) / len(slice_data["ctdi_values"])
+                if slice_data["ctdi_values"] else 0
+            )
+            length = (
+                max(slice_data["z_positions"]) - min(slice_data["z_positions"])
+                if slice_data["z_positions"] else
+                sum(slice_data["thicknesses"])
+            )
+            dlp = avg_ctdi * length
+            if "head" in temp_cases[key]["Dataset"].StudyDescription.lower():
+                k = 0.0021
+            elif "neck" in temp_cases[key]["Dataset"].StudyDescription.lower():
+                k = 0.0059
+            elif "chest" in temp_cases[key]["Dataset"].StudyDescription.lower():
+                k = 0.014
+            elif "abdomen" in temp_cases[key]["Dataset"].StudyDescription.lower() or \
+                 "pelvis" in temp_cases[key]["Dataset"].StudyDescription.lower():
+                k = 0.015
+            else:
+                k = 0.015
+
+            dose = dlp * k
+            temp_cases[key]["CTDIvol"] = round(avg_ctdi, 5)
+            temp_cases[key]["DLP"] = round(dlp, 5)
+            temp_cases[key]["kFactor"] = k
+            temp_cases[key]["mSv"] = round(dose, 5)
+
     # ======= توليد رسائل HL7 لكل حالة =======
     for key, case in temp_cases.items():
         hl7_msg = convert_to_hl7_from_table(case)
@@ -417,8 +452,6 @@ def process_dicom_files(files):
         data["DosePerYear"] = dose_per_year_dict.get((pid, dt), 0)
 
     display_text_data()
-
-
 
 # ================================================================
 # عدل دالة read_dicom_files الحالية لتستخدم process_dicom_files:
@@ -850,3 +883,54 @@ welcome_label.pack(expand=True)
 welcome_label.bind("<Button-1>", lambda e: read_dicom_folder())
 root.mainloop()
 
+import os
+import pydicom
+import pytesseract
+from PIL import Image
+import numpy as np
+import cv2
+# The above code is assigning a file path to the variable `folder_path`. The file path is pointing to
+# a folder located at `C:\CT\Alaa Eldin`.
+folder_path=r"C:\CT\Alaa Eldin"
+def extract_total_dlp_from_dicom_files(folder_path):
+    total_dlp_found = False
+
+    for root, _, files in os.walk(folder_path):
+        for file in files:
+            if file.lower().endswith(".dcm"):
+                file_path = os.path.join(root, file)
+                try:
+                    ds = pydicom.dcmread(file_path)
+
+                    # نحاول نحول الصورة لـ grayscale لاستخدام OCR
+                    if 'PixelData' in ds:
+                        image = ds.pixel_array.astype(np.float32)
+                        image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX)
+                        image = image.astype(np.uint8)
+
+                        # تحويل لصورة PIL عشان OCR
+                        pil_img = Image.fromarray(image)
+                        text = pytesseract.image_to_string(pil_img)
+
+                        # نبحث عن Total DLP
+                        for line in text.split("\n"):
+                            if "Total DLP" in line:
+                                print(f"From file: {file_path}")
+                                print(f"Line: {line}")
+                                dlp_value = extract_number_from_text(line)
+                                if dlp_value:
+                                    print(f"✅ Total DLP Found: {dlp_value} mGy·cm\n")
+                                    total_dlp_found = True
+                except Exception as e:
+                    print(f"❌ Error reading file {file_path}: {e}")
+
+    if not total_dlp_found:
+        print("❌ لم يتم العثور على Total DLP في أي ملف.")
+
+def extract_number_from_text(text):
+    """Extract first float number from a line of text."""
+    import re
+    matches = re.findall(r"[\d\.]+", text)
+    if matches:
+        return float(matches[0])
+    return None
