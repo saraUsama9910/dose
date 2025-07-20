@@ -204,6 +204,20 @@ def read_dicom_folder():
 
     process_dicom_files(dicom_files)
 
+def get_k_factor(study_desc):
+    study_desc = study_desc.lower()
+    if "head" in study_desc:
+        return 0.0021
+    elif "neck" in study_desc:
+        return 0.0059
+    elif "chest" in study_desc:
+        return 0.014
+    elif "abdomen" in study_desc or "pelvis" in study_desc:
+        return 0.015
+    else:
+        return 0.015
+
+
 def extract_dlp_from_image(ds):
     try:
         if 'PixelData' not in ds:
@@ -214,17 +228,16 @@ def extract_dlp_from_image(ds):
         text = pytesseract.image_to_string(img)
 
         for line in text.splitlines():
-            if "total dlp" in line.lower():
-                numbers = [float(s.replace(",", ".")) 
-                           for s in line.split() 
-                           if s.replace(",", ".").replace(".", "", 1).isdigit()]
-                for num in numbers:
-                    if num > 10:  # تجاهل الأرقام غير المنطقية
-                        return num
+            match = re.search(r"total\s*dlp.*?([\d.,]+)", line, re.IGNORECASE)
+            if match:
+                try:
+                    value = float(match.group(1).replace(",", "."))
+                    if value > 10:
+                        return value
+                except:
+                    continue
     except Exception as e:
         print("OCR Error:", e)
-        return None
-
     return None
 
 
@@ -280,31 +293,20 @@ def process_dicom_files(files):
                     "Dataset": ds
                 }
 
-            # ==== OCR DLP فقط أول مرة لكل حالة CT ====
-            if modality == "CT" and key not in ocr_checked_keys:
-                ocr_checked_keys.add(key)
-                if 'PixelData' in ds:
-                    ocr_dlp = extract_dlp_from_image(ds)
-                    if ocr_dlp:
-                        if "head" in study_desc:
-                            k = 0.0021
-                        elif "neck" in study_desc:
-                            k = 0.0059
-                        elif "chest" in study_desc:
-                            k = 0.014
-                        elif "abdomen" in study_desc or "pelvis" in study_desc:
-                            k = 0.015
-                        else:
-                            k = 0.015
-
-                        dose = ocr_dlp * k
-                        temp_cases[key]["CTDIvol"] = 0  # مش مستخرج من الصورة
-                        temp_cases[key]["DLP"] = round(ocr_dlp, 5)
-                        temp_cases[key]["kFactor"] = k
-                        temp_cases[key]["mSv"] = round(dose, 5)
-                        continue  # OCR لقينا DLP خلاص، مش هنكمل قراءة CT
-
             if modality == "CT":
+                if key not in ocr_checked_keys:
+                    ocr_checked_keys.add(key)
+                    if 'PixelData' in ds:
+                        ocr_dlp = extract_dlp_from_image(ds)
+                        if ocr_dlp:
+                            print(f"[{name} - {date_obj.date()}] Total DLP from OCR: {ocr_dlp}")
+                            k = get_k_factor(study_desc)
+                            temp_cases[key]["CTDIvol"] = 0
+                            temp_cases[key]["DLP"] = round(ocr_dlp, 5)
+                            temp_cases[key]["kFactor"] = k
+                            temp_cases[key]["mSv"] = round(ocr_dlp * k, 5)
+                            continue
+
                 ctdi = ds.get("CTDIvol", None)
                 thickness = ds.get("SliceThickness", None)
                 z = None
@@ -345,15 +347,7 @@ def process_dicom_files(files):
                             case_dap_totals[key] = 0.0
                         case_dap_totals[key] += dap_val
 
-                        if "chest" in study_desc:
-                            k = 0.17
-                        elif "abdomen" in study_desc:
-                            k = 0.2
-                        elif "pelvis" in study_desc:
-                            k = 0.25
-                        else:
-                            k = 0.2
-
+                        k = get_k_factor(study_desc)
                         msv = case_dap_totals[key] * k
                         temp_cases[key]["DLP"] = round(case_dap_totals[key], 5)
                         temp_cases[key]["kFactor"] = k
@@ -379,7 +373,6 @@ def process_dicom_files(files):
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process file {path}.\nError: {e}")
 
-    # ======= حساب CT fallback لو OCR مفشلش =======
     for key, slice_data in ct_slices_by_case.items():
         if temp_cases[key]["DLP"] == 0:
             avg_ctdi = (
@@ -392,25 +385,14 @@ def process_dicom_files(files):
                 sum(slice_data["thicknesses"])
             )
             dlp = avg_ctdi * length
-            if "head" in temp_cases[key]["Dataset"].StudyDescription.lower():
-                k = 0.0021
-            elif "neck" in temp_cases[key]["Dataset"].StudyDescription.lower():
-                k = 0.0059
-            elif "chest" in temp_cases[key]["Dataset"].StudyDescription.lower():
-                k = 0.014
-            elif "abdomen" in temp_cases[key]["Dataset"].StudyDescription.lower() or \
-                 "pelvis" in temp_cases[key]["Dataset"].StudyDescription.lower():
-                k = 0.015
-            else:
-                k = 0.015
-
-            dose = dlp * k
+            k = get_k_factor(temp_cases[key]["Dataset"].StudyDescription)
             temp_cases[key]["CTDIvol"] = round(avg_ctdi, 5)
             temp_cases[key]["DLP"] = round(dlp, 5)
             temp_cases[key]["kFactor"] = k
-            temp_cases[key]["mSv"] = round(dose, 5)
+            temp_cases[key]["mSv"] = round(dlp * k, 5)
 
-    # ======= توليد رسائل HL7 لكل حالة =======
+            print(f"[{temp_cases[key]['Name']} - {temp_cases[key]['Date'].date()}] Total DLP from CTDI×Length: {dlp}")
+
     for key, case in temp_cases.items():
         hl7_msg = convert_to_hl7_from_table(case)
         hl7_filename = f"{HL7_DIR}/{case['Name']}_{case['Date'].strftime('%Y%m%d')}_{case['PatientID']}.hl7"
@@ -419,7 +401,6 @@ def process_dicom_files(files):
 
     all_data.extend(temp_cases.values())
 
-    # ======= حساب الجرعة التراكمية والسنوية لكل مريض =======
     patient_records = {}
     for data in all_data:
         pid = data["PatientID"]
