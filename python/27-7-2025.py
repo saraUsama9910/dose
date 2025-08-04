@@ -3,6 +3,10 @@ from tkinter import filedialog, messagebox, simpledialog
 from PIL import Image, ImageTk
 import pydicom
 import os
+import pydicom
+import os
+import numpy as np
+
 import numpy as np
 from datetime import datetime
 from datetime import datetime, timedelta
@@ -11,6 +15,16 @@ import re
 from rapidfuzz import fuzz  
 import socket
 import pytesseract
+
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+
+
+
+image = Image.open("test.png")
+text = pytesseract.image_to_string(image)
+print(text)
+
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("dark-blue")
 CSV_FILE = "rad.csv"
@@ -155,21 +169,15 @@ def is_same_person(name1, name2, threshold=85):
 
 
 
-import pydicom
-from pydicom.errors import InvalidDicomError
-
 def is_dicom(file_path):
-    """
-    يحاول يقرأ أي ملف باستخدام pydicom،
-    بغض النظر عن الامتداد، ويتأكد إذا كان DICOM فعلاً.
-    """
+    """يتأكد إن الملف DICOM من محتواه الداخلي، مش من اسمه"""
     try:
-        # نقرأ فقط الميتا داتا بدون بيانات البكسل لتسريع العملية
-        ds = pydicom.dcmread(file_path, stop_before_pixels=True, force=True)
-        # ممكن نتأكد من بعض التاجات لو حابة
-        return True
-    except (InvalidDicomError, FileNotFoundError, IsADirectoryError, PermissionError):
+        with open(file_path, 'rb') as f:
+            f.seek(128)
+            return f.read(4) == b'DICM'
+    except:
         return False
+
 def read_dicom_folder():
     folders = filedialog.askdirectory()
     if not folders:
@@ -196,6 +204,45 @@ def read_dicom_folder():
 
     process_dicom_files(dicom_files)
 
+import re
+
+def get_k_factor(study_desc):
+    study_desc = study_desc.lower()
+    if "head" in study_desc:
+        return 0.0021
+    elif "neck" in study_desc:
+        return 0.0059
+    elif "chest" in study_desc:
+        return 0.014
+    elif "abdomen" in study_desc or "pelvis" in study_desc:
+        return 0.015
+    else:
+        return 0.015
+
+
+def extract_dlp_from_image(ds):
+    try:
+        if 'PixelData' not in ds:
+            return None
+
+        arr = ds.pixel_array
+        img = Image.fromarray(arr).convert("L")
+        text = pytesseract.image_to_string(img)
+
+        for line in text.splitlines():
+            match = re.search(r"total\s*dlp.*?([\d.,]+)", line, re.IGNORECASE)
+            if match:
+                try:
+                    value = float(match.group(1).replace(",", "."))
+                    if value > 10:
+                        return value
+                except:
+                    continue
+    except Exception as e:
+        print("OCR Error:", e)
+    return None
+
+
 def process_dicom_files(files):
     if not files:
         return
@@ -211,6 +258,7 @@ def process_dicom_files(files):
 
     case_dap_totals = {}
     ct_slices_by_case = {}
+    ocr_checked_keys = set()
 
     for path in files:
         try:
@@ -248,6 +296,18 @@ def process_dicom_files(files):
                 }
 
             if modality == "CT":
+                if key not in ocr_checked_keys:
+                    ocr_checked_keys.add(key)
+                    if 'PixelData' in ds:
+                        ocr_dlp = extract_dlp_from_image(ds)
+                        if ocr_dlp:
+                            k = get_k_factor(study_desc)
+                            temp_cases[key]["CTDIvol"] = 0
+                            temp_cases[key]["DLP"] = round(ocr_dlp, 5)
+                            temp_cases[key]["kFactor"] = k
+                            temp_cases[key]["mSv"] = round(ocr_dlp * k, 5)
+                            continue
+
                 ctdi = ds.get("CTDIvol", None)
                 thickness = ds.get("SliceThickness", None)
                 z = None
@@ -288,15 +348,7 @@ def process_dicom_files(files):
                             case_dap_totals[key] = 0.0
                         case_dap_totals[key] += dap_val
 
-                        if "chest" in study_desc:
-                            k = 0.17
-                        elif "abdomen" in study_desc:
-                            k = 0.2
-                        elif "pelvis" in study_desc:
-                            k = 0.25
-                        else:
-                            k = 0.2
-
+                        k = get_k_factor(study_desc)
                         msv = case_dap_totals[key] * k
                         temp_cases[key]["DLP"] = round(case_dap_totals[key], 5)
                         temp_cases[key]["kFactor"] = k
@@ -322,48 +374,24 @@ def process_dicom_files(files):
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process file {path}.\nError: {e}")
 
-    # ======= حساب CT =======
-    for key in ct_slices_by_case:
-        case = ct_slices_by_case[key]
-        ctdi_vals = case["ctdi_values"]
-        z_positions = case["z_positions"]
-        thicknesses = case["thicknesses"]
+    for key, slice_data in ct_slices_by_case.items():
+        if temp_cases[key]["DLP"] == 0:
+            avg_ctdi = (
+                sum(slice_data["ctdi_values"]) / len(slice_data["ctdi_values"])
+                if slice_data["ctdi_values"] else 0
+            )
+            length = (
+                max(slice_data["z_positions"]) - min(slice_data["z_positions"])
+                if slice_data["z_positions"] else
+                sum(slice_data["thicknesses"])
+            )
+            dlp = avg_ctdi * length
+            k = get_k_factor(temp_cases[key]["Dataset"].StudyDescription)
+            temp_cases[key]["CTDIvol"] = round(avg_ctdi, 5)
+            temp_cases[key]["DLP"] = round(dlp, 5)
+            temp_cases[key]["kFactor"] = k
+            temp_cases[key]["mSv"] = round(dlp * k, 5)
 
-        if not ctdi_vals:
-            continue
-
-        avg_ctdi = sum(ctdi_vals) / len(ctdi_vals)
-        scan_length = None
-
-        if len(z_positions) >= 2:
-            scan_length = abs(max(z_positions) - min(z_positions))
-        elif thicknesses:
-            avg_thickness = sum(thicknesses) / len(thicknesses)
-            scan_length = avg_thickness * len(thicknesses)
-        else:
-            scan_length = 400  # fallback تقديري
-
-        dlp = avg_ctdi * scan_length
-
-        study_desc = temp_cases[key]["Dataset"].get("StudyDescription", "").lower()
-        k = 0.015
-        if "head" in study_desc:
-            k = 0.0021
-        elif "neck" in study_desc:
-            k = 0.0059
-        elif "chest" in study_desc:
-            k = 0.014
-        elif "abdomen" in study_desc or "pelvis" in study_desc:
-            k = 0.015
-
-        dose = dlp * k
-
-        temp_cases[key]["CTDIvol"] = round(avg_ctdi, 5)
-        temp_cases[key]["DLP"] = round(dlp, 5)
-        temp_cases[key]["kFactor"] = k
-        temp_cases[key]["mSv"] = round(dose, 5)
-
-    # ======= توليد رسائل HL7 لكل حالة =======
     for key, case in temp_cases.items():
         hl7_msg = convert_to_hl7_from_table(case)
         hl7_filename = f"{HL7_DIR}/{case['Name']}_{case['Date'].strftime('%Y%m%d')}_{case['PatientID']}.hl7"
@@ -372,7 +400,6 @@ def process_dicom_files(files):
 
     all_data.extend(temp_cases.values())
 
-    # ======= حساب الجرعة التراكمية والسنوية لكل مريض =======
     patient_records = {}
     for data in all_data:
         pid = data["PatientID"]
@@ -405,7 +432,6 @@ def process_dicom_files(files):
         data["DosePerYear"] = dose_per_year_dict.get((pid, dt), 0)
 
     display_text_data()
-
 
 
 # ================================================================
@@ -545,7 +571,10 @@ def show_case_images(case):
     window = ctk.CTkToplevel()
     window.title(f"Images for {case['Name']} - {case['Date'].strftime('%Y-%m-%d')}")
     window.geometry("900x700")
-
+    # رفع النافذة للأعلى وإجبارها تبقى فوق كل شيء
+    window.lift()
+    window.attributes("-topmost", True)
+    window.focus_force()
     index = 0
     images = case.get("Images", [])
 
@@ -637,7 +666,12 @@ def show_selected_cases():
     top = ctk.CTkToplevel(root)
     top.title("Selected Cases Viewer")
     top.geometry("1100x700")
+
+    # رفع النافذة فوق كل النوافذ
     top.lift()
+    top.attributes("-topmost", True)
+    top.focus_force()  # إجبار التركيز على النافذة
+
 
     rows = 2 if len(selected_cases) == 4 else 1
     cols = 2
@@ -780,16 +814,16 @@ ctk.CTkButton(root, text="💬 HL7 Message", command=show_hl7_for_selected,
               corner_radius=10, font=("Arial", 16, "bold")).place(relx=0.01, rely=0.34)
 
 
-ctk.CTkButton(root, text="🧾 Selected Cases", command=show_selected_cases,
+ctk.CTkButton(root, text="🧾 Show Cases", command=show_selected_cases_images,
               width=140, height=40, fg_color=SELECT_COLOR, hover_color=SELECT_HOVER,
               corner_radius=10, font=("Arial", 16, "bold")).place(relx=0.01, rely=0.40)
 
 ctk.CTkButton(root, text="❌ Delete Cases", command=delete_selected,
               width=140, height=40, fg_color=DELETE_COLOR, hover_color=DELETE_HOVER,
               corner_radius=10, font=("Arial", 16, "bold")).place(relx=0.01, rely=0.46)
-ctk.CTkButton(root, text="🧾 Show Cases", command=show_selected_cases_images,
-              width=140, height=40, fg_color=SELECT_COLOR,  hover_color=SELECT_HOVER,
-              corner_radius=10, font=("Arial", 16, "bold")).place(relx=0.01, rely=0.52)
+# ctk.CTkButton(root, text="🧾 Show Cases", command=show_selected_cases_images,
+#               width=140, height=40, fg_color=SELECT_COLOR,  hover_color=SELECT_HOVER,
+#               corner_radius=10, font=("Arial", 16, "bold")).place(relx=0.01, rely=0.52)
 # خيارات الفلترة والترتيب بجانب الأزرار
 sort_var = ctk.StringVar(value="Name")
 ctk.CTkLabel(root, text="Sort by:",fg_color="white", text_color="black").place(relx=0.78, rely=0.08)
@@ -820,7 +854,7 @@ end_date_var.trace_add("write", lambda *args: display_text_data())
 # shadow frame (أسود فاتح كخلفية خفيفة)
 shadow_frame = ctk.CTkFrame(root, fg_color="#416dcc", corner_radius=12)
 shadow_frame.place(relx=0.14, rely=0.15, relwidth=0.80, relheight=0.70)
-# frame الأساسي فوق الـ shadow
+# frame الأساسي فوق الـ shadowok
 content_frame = ctk.CTkFrame(root, fg_color="#ffffff", corner_radius=10)
 content_frame.place(relx=0.15, rely=0.16, relwidth=0.78, relheight=0.68)
 # رسالة ترحيبية
@@ -830,3 +864,54 @@ welcome_label.pack(expand=True)
 welcome_label.bind("<Button-1>", lambda e: read_dicom_folder())
 root.mainloop()
 
+import os
+import pydicom
+import pytesseract
+from PIL import Image
+import numpy as np
+import cv2
+# The above code is assigning a file path to the variable `folder_path`. The file path is pointing to
+# a folder located at `C:\CT\Alaa Eldin`.
+folder_path=r"C:\CT\Alaa Eldin"
+def extract_total_dlp_from_dicom_files(folder_path):
+    total_dlp_found = False
+
+    for root, _, files in os.walk(folder_path):
+        for file in files:
+            if file.lower().endswith(".dcm"):
+                file_path = os.path.join(root, file)
+                try:
+                    ds = pydicom.dcmread(file_path)
+
+                    # نحاول نحول الصورة لـ grayscale لاستخدام OCR
+                    if 'PixelData' in ds:
+                        image = ds.pixel_array.astype(np.float32)
+                        image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX)
+                        image = image.astype(np.uint8)
+
+                        # تحويل لصورة PIL عشان OCR
+                        pil_img = Image.fromarray(image)
+                        text = pytesseract.image_to_string(pil_img)
+
+                        # نبحث عن Total DLP
+                        for line in text.split("\n"):
+                            if "Total DLP" in line:
+                                print(f"From file: {file_path}")
+                                print(f"Line: {line}")
+                                dlp_value = extract_number_from_text(line)
+                                if dlp_value:
+                                    print(f"✅ Total DLP Found: {dlp_value} mGy·cm\n")
+                                    total_dlp_found = True
+                except Exception as e:
+                    print(f"❌ Error reading file {file_path}: {e}")
+
+    if not total_dlp_found:
+        print("❌ لم يتم العثور على Total DLP في أي ملف.")
+
+def extract_number_from_text(text):
+    """Extract first float number from a line of text."""
+    import re
+    matches = re.findall(r"[\d\.]+", text)
+    if matches:
+        return float(matches[0])
+    return None
