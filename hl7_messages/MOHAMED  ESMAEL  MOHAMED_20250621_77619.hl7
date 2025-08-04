@@ -1,8 +1,12 @@
-MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250709150002||ORM^O01|77619|P|2.3
+<<<<<<< HEAD
+MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250804153518||ORM^O01|77619|P|2.3
+=======
+MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250729164419||ORM^O01|77619|P|2.3
+>>>>>>> ff2487a9b626d22de9fc91c53e1ec43d2677c816
 PID|||77619||MOHAMED  ESMAEL  MOHAMED|||19700621|M
 OBR|||77619||CT|||||20250621
-OBX|1|NM|CTDIvol||7.53552|mGy
-OBX|2|NM|DLP||3332.92741|mGy*cm
-OBX|3|NM|Dose_mSv||46.66098|mSv
+OBX|1|NM|CTDIvol||0.00000|mGy
+OBX|2|NM|DLP||4.31500|mGy*cm
+OBX|3|NM|Dose_mSv||0.86300|mSv
 OBX|4|NM|AccumulatedDose||0.00000|mSv
 OBX|5|NM|DosePerYear||0.00000|mSv

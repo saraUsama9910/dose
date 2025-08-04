@@ -1,0 +1,12 @@
+<<<<<<< HEAD
+MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250730170025||ORM^O01||P|2.3
+=======
+MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250730151605||ORM^O01||P|2.3
+>>>>>>> ff2487a9b626d22de9fc91c53e1ec43d2677c816
+PID|||||Unknown||||
+OBR||||||||||20250730
+OBX|1|NM|CTDIvol||0.00000|mGy
+OBX|2|NM|DLP||0.00000|mGy*cm
+OBX|3|NM|Dose_mSv||0.00000|mSv
+OBX|4|NM|AccumulatedDose||0.00000|mSv
+OBX|5|NM|DosePerYear||0.00000|mSv

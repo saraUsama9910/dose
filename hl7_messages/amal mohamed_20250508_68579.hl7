@@ -1,8 +1,12 @@
-MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250709150002||ORM^O01|68579|P|2.3
+<<<<<<< HEAD
+MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250804153518||ORM^O01|68579|P|2.3
+=======
+MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250727163306||ORM^O01|68579|P|2.3
+>>>>>>> ff2487a9b626d22de9fc91c53e1ec43d2677c816
 PID|||68579||amal mohamed|||19650508|F
 OBR|||68579||CR|||||20250508
 OBX|1|NM|CTDIvol||0.00000|mGy
 OBX|2|NM|DLP||56.34900|mGy*cm
-OBX|3|NM|Dose_mSv||11.26980|mSv
+OBX|3|NM|Dose_mSv||0.84524|mSv
 OBX|4|NM|AccumulatedDose||0.00000|mSv
 OBX|5|NM|DosePerYear||0.00000|mSv
