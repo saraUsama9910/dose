@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250804153518||ORM^O01|68579|P|2.3
+=======
+MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250727163306||ORM^O01|68579|P|2.3
+>>>>>>> ff2487a9b626d22de9fc91c53e1ec43d2677c816
 PID|||68579||amal mohamed|||19650508|F
 OBR|||68579||CR|||||20250508
 OBX|1|NM|CTDIvol||0.00000|mGy

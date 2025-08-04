@@ -246,7 +246,7 @@ def extract_dlp_from_image(ds):
 def process_dicom_files(files):
     if not files:
         return
-
+    
     for widget in content_frame.winfo_children():
         widget.destroy()
 

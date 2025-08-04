@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250730163307||ORM^O01||P|2.3
+=======
+MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250729163438||ORM^O01||P|2.3
+>>>>>>> ff2487a9b626d22de9fc91c53e1ec43d2677c816
 PID|||||^huda sayed ahmed||||F
 OBR|||||DX|||||20250725
 OBX|1|NM|CTDIvol||0.00000|mGy

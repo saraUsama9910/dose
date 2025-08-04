@@ -251,7 +251,11 @@ def process_dicom_files(files):
         widget.destroy()
 
     temp_cases = {}
+<<<<<<< HEAD
     existing_keys = [ 
+=======
+    existing_keys = [
+>>>>>>> ff2487a9b626d22de9fc91c53e1ec43d2677c816
         (d["Name"], d["Date"].date(), d["PatientID"], d.get("Accession", ""))
         for d in all_data
     ]
