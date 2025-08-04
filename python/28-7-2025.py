@@ -251,18 +251,13 @@ def process_dicom_files(files):
         widget.destroy()
 
     temp_cases = {}
-<<<<<<< HEAD
-    existing_keys = [ 
-=======
     existing_keys = [
->>>>>>> ff2487a9b626d22de9fc91c53e1ec43d2677c816
         (d["Name"], d["Date"].date(), d["PatientID"], d.get("Accession", ""))
         for d in all_data
     ]
 
-    case_dap_totals = {}
+    case_dap_totals = {}  # لتجميع DAP لكل حالة X-ray
     ct_slices_by_case = {}
-    ocr_checked_keys = set()
 
     for path in files:
         try:
@@ -300,18 +295,7 @@ def process_dicom_files(files):
                 }
 
             if modality == "CT":
-                if key not in ocr_checked_keys:
-                    ocr_checked_keys.add(key)
-                    if 'PixelData' in ds:
-                        ocr_dlp = extract_dlp_from_image(ds)
-                        if ocr_dlp:
-                            k = get_k_factor(study_desc)
-                            temp_cases[key]["CTDIvol"] = 0
-                            temp_cases[key]["DLP"] = round(ocr_dlp, 5)
-                            temp_cases[key]["kFactor"] = k
-                            temp_cases[key]["mSv"] = round(ocr_dlp * k, 5)
-                            continue
-
+                # تم حذف جزء الـ OCR من هنا
                 ctdi = ds.get("CTDIvol", None)
                 thickness = ds.get("SliceThickness", None)
                 z = None
@@ -344,19 +328,13 @@ def process_dicom_files(files):
                     ct_slices_by_case[key]["z_positions"].append(z)
 
             elif modality in ["CR", "DR", "DX", "XRAY"]:
-                dap = ds.get((0x0018, 0x115E), None)
-                if dap:
+                dap_element = ds.get((0x0018, 0x115E), None)
+                if dap_element:
                     try:
-                        dap_val = float(dap.value)
+                        dap_val = float(dap_element.value)
                         if key not in case_dap_totals:
-                            case_dap_totals[key] = 0.0
-                        case_dap_totals[key] += dap_val
-
-                        k = get_k_factor(study_desc)
-                        msv = case_dap_totals[key] * k
-                        temp_cases[key]["DLP"] = round(case_dap_totals[key], 5)
-                        temp_cases[key]["kFactor"] = k
-                        temp_cases[key]["mSv"] = round(msv, 5)
+                            case_dap_totals[key] = []
+                        case_dap_totals[key].append(dap_val)
                     except:
                         pass
 
@@ -378,6 +356,7 @@ def process_dicom_files(files):
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process file {path}.\nError: {e}")
 
+    # حساب DLP و mSv لحالات CT
     for key, slice_data in ct_slices_by_case.items():
         if temp_cases[key]["DLP"] == 0:
             avg_ctdi = (
@@ -396,6 +375,16 @@ def process_dicom_files(files):
             temp_cases[key]["kFactor"] = k
             temp_cases[key]["mSv"] = round(dlp * k, 5)
 
+    # حساب DAP و mSv لحالات X-ray
+    for key in case_dap_totals:
+        total_dap = sum(case_dap_totals[key])
+        k = get_k_factor(temp_cases[key]["Dataset"].StudyDescription)
+        msv = total_dap * k
+        temp_cases[key]["DLP"] = round(total_dap, 5)
+        temp_cases[key]["kFactor"] = k
+        temp_cases[key]["mSv"] = round(msv, 5)
+
+    # توليد ملفات HL7
     for key, case in temp_cases.items():
         hl7_msg = convert_to_hl7_from_table(case)
         hl7_filename = f"{HL7_DIR}/{case['Name']}_{case['Date'].strftime('%Y%m%d')}_{case['PatientID']}.hl7"
@@ -404,6 +393,7 @@ def process_dicom_files(files):
 
     all_data.extend(temp_cases.values())
 
+    # حساب الجرعة التراكمية و السنوية
     patient_records = {}
     for data in all_data:
         pid = data["PatientID"]
@@ -436,7 +426,6 @@ def process_dicom_files(files):
         data["DosePerYear"] = dose_per_year_dict.get((pid, dt), 0)
 
     display_text_data()
-
 
 # ================================================================
 # عدل دالة read_dicom_files الحالية لتستخدم process_dicom_files:

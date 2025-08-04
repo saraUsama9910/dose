@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250804153518||ORM^O01|10675|P|2.3
-=======
-MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250720154755||ORM^O01|10675|P|2.3
->>>>>>> ff2487a9b626d22de9fc91c53e1ec43d2677c816
+MSH|^~\&|RadiologySystem|Hospital|PACS|Hospital|20250804171552||ORM^O01|10675|P|2.3
 PID|||10675||MONA MOHAMED AHMED|||19530107|F
 OBR|||10675||CT|||||20250530
 OBX|1|NM|CTDIvol||13.19185|mGy
